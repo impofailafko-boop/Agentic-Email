@@ -9,9 +9,16 @@ import { CategorizerAgent } from '../agents/categorizer.agent';
 import { PrioritizerAgent } from '../agents/prioritizer.agent';
 import { SummarizerAgent } from '../agents/summarizer.agent';
 import { Email } from '../models/email.model';
+import { JWTService } from '../auth/jwt.service';
+import { PasswordService } from '../auth/password.service';
+import { APIKeyService } from '../auth/api-key.service';
+import { RBACService } from '../auth/rbac.service';
+import { AuthMiddleware, AuthenticatedRequest } from './middleware/auth.middleware';
+import { createAuthRoutes } from './routes/auth.routes';
 import { v4 as uuidv4 } from 'uuid';
 import winston from 'winston';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 dotenv.config();
 
@@ -22,6 +29,11 @@ export class EmailServer {
   private emailService!: EmailService;
   private orchestrator!: AgentOrchestrator;
   private database: DatabaseService;
+  private jwtService: JWTService;
+  private passwordService: PasswordService;
+  private apiKeyService: APIKeyService;
+  private rbacService: RBACService;
+  private authMiddleware!: AuthMiddleware;
   private logger: winston.Logger;
 
   constructor(private port: number = 3000) {
@@ -46,6 +58,11 @@ export class EmailServer {
     });
 
     this.database = new DatabaseService(process.env.DB_PATH || './emails.db');
+    this.jwtService = new JWTService();
+    this.passwordService = new PasswordService();
+    this.apiKeyService = new APIKeyService();
+    this.rbacService = new RBACService();
+
     this.setupServices();
     this.setupMiddleware();
     this.setupRoutes();
@@ -54,6 +71,13 @@ export class EmailServer {
 
   private async setupServices(): Promise<void> {
     await this.database.connect();
+
+    this.authMiddleware = new AuthMiddleware(
+      this.database,
+      this.jwtService,
+      this.apiKeyService,
+      this.rbacService
+    );
 
     const emailProvider = new GmailProvider({
       user: process.env.EMAIL_USER || '',
@@ -66,8 +90,8 @@ export class EmailServer {
     const categorizerConfig = {
       id: uuidv4(),
       name: 'Categorizer',
-      type: 'categorizer',
-      status: 'idle',
+      type: 'categorizer' as const,
+      status: 'idle' as const,
       enabled: true,
       priority: 80,
       config: {},
@@ -78,20 +102,20 @@ export class EmailServer {
     const prioritizerConfig = {
       id: uuidv4(),
       name: 'Prioritizer',
-      type: 'prioritizer',
-      status: 'idle',
+      type: 'prioritizer' as const,
+      status: 'idle' as const,
       enabled: true,
       priority: 70,
       config: {},
       capabilities: ['prioritize'],
     };
-    const prioritizerAgent = new PriorizerAgent(prioritizerConfig);
+    const prioritizerAgent = new PrioritizerAgent(prioritizerConfig);
 
     const summarizerConfig = {
       id: uuidv4(),
       name: 'Summarizer',
-      type: 'summarizer',
-      status: 'idle',
+      type: 'summarizer' as const,
+      status: 'idle' as const,
       enabled: true,
       priority: 60,
       config: {},
@@ -111,32 +135,58 @@ export class EmailServer {
   }
 
   private setupMiddleware(): void {
+    // CORS configuration
+    this.app.use(cors({
+      origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }));
+
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
-    
-    this.app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      next();
-    });
 
+    // Request logging
     this.app.use((req, res, next) => {
       this.logger.info(`${req.method} ${req.path}`);
       next();
     });
+
+    // Global error handler
+    this.app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      this.logger.error('Unhandled error', err);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+      });
+    });
   }
 
   private setupRoutes(): void {
-    this.app.get('/health', (req, res) => {
+    // Public routes
+    this.app.get('/health', (_req, res) => {
       res.json({ status: 'healthy', timestamp: new Date() });
     });
 
-    this.app.post('/api/emails/send', async (req, res) => {
+    // Auth routes
+    this.app.use('/api/auth', createAuthRoutes(
+      this.database,
+      this.jwtService,
+      this.passwordService,
+      this.apiKeyService,
+      this.authMiddleware,
+      this.logger
+    ));
+
+    // Protected routes - require authentication
+    this.app.post('/api/emails/send',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'send'),
+      async (_req: AuthenticatedRequest, res) => {
       try {
-        const email = await this.emailService.send(req.body);
-        const result = await this.orchestrator.processEmail(email);
-        res.json(result.finalEmail);
+        const email = await this.emailService.send(_req.body);
+        const processResult = await this.orchestrator.processEmail(email);
+        res.json(processResult.finalEmail);
       } catch (error) {
         this.logger.error('Failed to send email', error);
         res.status(500).json({ 
@@ -164,7 +214,10 @@ export class EmailServer {
       }
     });
 
-    this.app.get('/api/emails/:id', async (req, res) => {
+    this.app.get('/api/emails/:id',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'read'),
+      async (req: AuthenticatedRequest, res) => {
       try {
         const email = await this.emailService.getById(req.params.id);
         if (!email) {
@@ -180,7 +233,10 @@ export class EmailServer {
       }
     });
 
-    this.app.put('/api/emails/:id', async (req, res) => {
+    this.app.put('/api/emails/:id',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'update'),
+      async (req: AuthenticatedRequest, res) => {
       try {
         const email = await this.emailService.update(req.params.id, req.body);
         res.json(email);
@@ -192,7 +248,10 @@ export class EmailServer {
       }
     });
 
-    this.app.delete('/api/emails/:id', async (req, res) => {
+    this.app.delete('/api/emails/:id',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'delete'),
+      async (req: AuthenticatedRequest, res) => {
       try {
         const success = await this.emailService.delete(req.params.id);
         res.json({ success });
@@ -204,7 +263,10 @@ export class EmailServer {
       }
     });
 
-    this.app.post('/api/emails/search', async (req, res) => {
+    this.app.post('/api/emails/search',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'read'),
+      async (req: AuthenticatedRequest, res) => {
       try {
         const emails = await this.emailService.search(req.body);
         res.json(emails);
@@ -216,7 +278,10 @@ export class EmailServer {
       }
     });
 
-    this.app.get('/api/emails/threads', async (req, res) => {
+    this.app.get('/api/emails/threads',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('emails', 'read'),
+      async (_req: AuthenticatedRequest, res) => {
       try {
         const threads = await this.emailService.getThreads();
         res.json(threads);
@@ -228,7 +293,10 @@ export class EmailServer {
       }
     });
 
-    this.app.get('/api/agents', (_req, res) => {
+    this.app.get('/api/agents',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('agents', 'read'),
+      (_req: AuthenticatedRequest, res) => {
       const agents = this.orchestrator.getAgents();
       res.json(agents.map(agent => ({
         id: agent.id,
@@ -238,7 +306,10 @@ export class EmailServer {
       })));
     });
 
-    this.app.get('/api/agents/:id/status', (req, res) => {
+    this.app.get('/api/agents/:id/status',
+      this.authMiddleware.requireAuth,
+      this.authMiddleware.requirePermission('agents', 'read'),
+      (req: AuthenticatedRequest, res) => {
       const status = this.orchestrator.getAgentStatus(req.params.id);
       if (!status) {
         res.status(404).json({ error: 'Agent not found' });

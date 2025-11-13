@@ -1,5 +1,6 @@
 import { Email } from '../models/email.model';
 import { AgentTask } from '../models/agent.model';
+import { User, APIKey, UserRole } from '../models/user.model';
 import { IDatabase, EmailSearchQuery } from '../core/interfaces';
 import sqlite3 from 'sqlite3';
 import winston from 'winston';
@@ -134,10 +135,42 @@ export class DatabaseService implements IDatabase {
       )
     `);
 
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        passwordHash TEXT NOT NULL,
+        roles TEXT NOT NULL,
+        isActive INTEGER DEFAULT 1,
+        metadata TEXT,
+        createdAt INTEGER DEFAULT (strftime('%s', 'now')),
+        updatedAt INTEGER DEFAULT (strftime('%s', 'now')),
+        lastLogin INTEGER
+      )
+    `);
+
+    await runAsync(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        permissions TEXT NOT NULL,
+        createdAt INTEGER DEFAULT (strftime('%s', 'now')),
+        lastUsedAt INTEGER,
+        expiresAt INTEGER,
+        isActive INTEGER DEFAULT 1,
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     await runAsync('CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date)');
     await runAsync('CREATE INDEX IF NOT EXISTS idx_emails_category ON emails(category)');
     await runAsync('CREATE INDEX IF NOT EXISTS idx_emails_priority ON emails(priority)');
     await runAsync('CREATE INDEX IF NOT EXISTS idx_agent_tasks_agentId ON agent_tasks(agentId)');
+    await runAsync('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+    await runAsync('CREATE INDEX IF NOT EXISTS idx_api_keys_userId ON api_keys(userId)');
+    await runAsync('CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)');
   }
 
   async saveEmail(email: Email): Promise<void> {
@@ -507,6 +540,367 @@ export class DatabaseService implements IDatabase {
       isDraft: row.isDraft === 1,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       aiAnalysis: row.aiAnalysis ? JSON.parse(row.aiAnalysis) : undefined,
+    };
+  }
+
+  // User management methods
+
+  async createUser(user: User): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync(
+      `INSERT INTO users (
+        id, email, passwordHash, roles, isActive, metadata, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        user.id,
+        user.email,
+        user.passwordHash,
+        JSON.stringify(user.roles),
+        user.isActive ? 1 : 0,
+        JSON.stringify(user.metadata || {}),
+        user.createdAt.getTime(),
+        user.updatedAt.getTime(),
+      ]
+    );
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const getAsync = (sql: string, params?: any[]): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        this.db!.get(sql, params || [], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    };
+
+    const allAsync = (sql: string, params?: any[]): Promise<any[]> => {
+      return new Promise((resolve, reject) => {
+        this.db!.all(sql, params || [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+    };
+
+    const row = await getAsync('SELECT * FROM users WHERE id = ?', [id]);
+    if (!row) return null;
+
+    const apiKeys = await allAsync('SELECT * FROM api_keys WHERE userId = ?', [id]);
+
+    return this.rowToUser(row, apiKeys);
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const getAsync = (sql: string, params?: any[]): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        this.db!.get(sql, params || [], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    };
+
+    const allAsync = (sql: string, params?: any[]): Promise<any[]> => {
+      return new Promise((resolve, reject) => {
+        this.db!.all(sql, params || [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+    };
+
+    const row = await getAsync('SELECT * FROM users WHERE email = ?', [email]);
+    if (!row) return null;
+
+    const apiKeys = await allAsync('SELECT * FROM api_keys WHERE userId = ?', [row.id]);
+
+    return this.rowToUser(row, apiKeys);
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    const fields: string[] = [];
+    const params: any[] = [];
+
+    if (updates.email !== undefined) {
+      fields.push('email = ?');
+      params.push(updates.email);
+    }
+
+    if (updates.passwordHash !== undefined) {
+      fields.push('passwordHash = ?');
+      params.push(updates.passwordHash);
+    }
+
+    if (updates.roles !== undefined) {
+      fields.push('roles = ?');
+      params.push(JSON.stringify(updates.roles));
+    }
+
+    if (updates.isActive !== undefined) {
+      fields.push('isActive = ?');
+      params.push(updates.isActive ? 1 : 0);
+    }
+
+    if (updates.metadata !== undefined) {
+      fields.push('metadata = ?');
+      params.push(JSON.stringify(updates.metadata));
+    }
+
+    if (updates.lastLogin !== undefined) {
+      fields.push('lastLogin = ?');
+      params.push(updates.lastLogin.getTime());
+    }
+
+    fields.push('updatedAt = ?');
+    params.push(Date.now());
+
+    params.push(id);
+
+    await runAsync(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+      params
+    );
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync('DELETE FROM api_keys WHERE userId = ?', [id]);
+    await runAsync('DELETE FROM users WHERE id = ?', [id]);
+  }
+
+  async listUsers(limit?: number, offset?: number): Promise<User[]> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const allAsync = (sql: string, params?: any[]): Promise<any[]> => {
+      return new Promise((resolve, reject) => {
+        this.db!.all(sql, params || [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+    };
+
+    let sql = 'SELECT * FROM users ORDER BY createdAt DESC';
+    const params: any[] = [];
+
+    if (limit) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+    }
+
+    if (offset) {
+      sql += ' OFFSET ?';
+      params.push(offset);
+    }
+
+    const rows = await allAsync(sql, params);
+    const users: User[] = [];
+
+    for (const row of rows) {
+      const apiKeys = await allAsync('SELECT * FROM api_keys WHERE userId = ?', [row.id]);
+      users.push(this.rowToUser(row, apiKeys));
+    }
+
+    return users;
+  }
+
+  // API Key management methods
+
+  async createAPIKey(apiKey: APIKey): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync(
+      `INSERT INTO api_keys (
+        id, key, name, userId, permissions, createdAt, expiresAt, isActive
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        apiKey.id,
+        apiKey.key,
+        apiKey.name,
+        apiKey.userId,
+        JSON.stringify(apiKey.permissions),
+        apiKey.createdAt.getTime(),
+        apiKey.expiresAt ? apiKey.expiresAt.getTime() : null,
+        apiKey.isActive ? 1 : 0,
+      ]
+    );
+  }
+
+  async getAPIKeyById(id: string): Promise<APIKey | null> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const getAsync = (sql: string, params?: any[]): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        this.db!.get(sql, params || [], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    };
+
+    const row = await getAsync('SELECT * FROM api_keys WHERE id = ?', [id]);
+    if (!row) return null;
+
+    return this.rowToAPIKey(row);
+  }
+
+  async getAPIKeyByKey(keyHash: string): Promise<APIKey | null> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const getAsync = (sql: string, params?: any[]): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        this.db!.get(sql, params || [], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    };
+
+    const row = await getAsync('SELECT * FROM api_keys WHERE key = ?', [keyHash]);
+    if (!row) return null;
+
+    return this.rowToAPIKey(row);
+  }
+
+  async updateAPIKeyLastUsed(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync('UPDATE api_keys SET lastUsedAt = ? WHERE id = ?', [
+      Date.now(),
+      id,
+    ]);
+  }
+
+  async revokeAPIKey(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync('UPDATE api_keys SET isActive = 0 WHERE id = ?', [id]);
+  }
+
+  async deleteAPIKey(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const runAsync = (sql: string, params?: any[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        this.db!.run(sql, params || [], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    };
+
+    await runAsync('DELETE FROM api_keys WHERE id = ?', [id]);
+  }
+
+  async listAPIKeys(userId: string): Promise<APIKey[]> {
+    if (!this.db) throw new Error('Database not connected');
+
+    const allAsync = (sql: string, params?: any[]): Promise<any[]> => {
+      return new Promise((resolve, reject) => {
+        this.db!.all(sql, params || [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+    };
+
+    const rows = await allAsync(
+      'SELECT * FROM api_keys WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    );
+
+    return rows.map(row => this.rowToAPIKey(row));
+  }
+
+  private rowToUser(row: any, apiKeys: any[]): User {
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.passwordHash,
+      roles: JSON.parse(row.roles) as UserRole[],
+      apiKeys: apiKeys.map(k => this.rowToAPIKey(k)),
+      isActive: row.isActive === 1,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      lastLogin: row.lastLogin ? new Date(row.lastLogin) : undefined,
+    };
+  }
+
+  private rowToAPIKey(row: any): APIKey {
+    return {
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      userId: row.userId,
+      permissions: JSON.parse(row.permissions),
+      createdAt: new Date(row.createdAt),
+      lastUsedAt: row.lastUsedAt ? new Date(row.lastUsedAt) : undefined,
+      expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
+      isActive: row.isActive === 1,
     };
   }
 }
