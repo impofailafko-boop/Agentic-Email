@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # Development server with hot reload
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: agentic-email-dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DB_PATH=/app/data/emails.db
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - app-data:/app/data
+      - ./logs:/app/logs
+      - node_modules:/app/node_modules
+    depends_on:
+      - redis
+    command: npm run dev
+    restart: unless-stopped
+    networks:
+      - agentic-network
+
+  # Redis for development
+  redis:
+    image: redis:7-alpine
+    container_name: agentic-email-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data-dev:/data
+    networks:
+      - agentic-network
+
+volumes:
+  app-data:
+    driver: local
+  redis-data-dev:
+    driver: local
+  node_modules:
+    driver: local
+
+networks:
+  agentic-network:
+    driver: bridge
