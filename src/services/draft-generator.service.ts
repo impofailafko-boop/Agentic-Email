@@ -313,8 +313,8 @@ Best,
   private generatePersonalizedIntro(_data: Record<string, any>, level: string): string {
     const intros = {
       low: 'I hope you\'re having a great day.',
-      medium: `I noticed you work at ${data.company || 'your company'} and thought you might be interested in this.`,
-      high: `${data.linkedinInsights ? `I saw your recent activity on LinkedIn - ${data.linkedinInsights}. ` : ''}Based on your interests in ${data.topics?.join(', ') || 'technology'}, I wanted to share something valuable with you.`,
+      medium: `I noticed you work at ${_data.company || 'your company'} and thought you might be interested in this.`,
+      high: `${_data.linkedinInsights ? `I saw your recent activity on LinkedIn - ${_data.linkedinInsights}. ` : ''}Based on your interests in ${_data.topics?.join(', ') || 'technology'}, I wanted to share something valuable with you.`,
     };
 
     return intros[level as keyof typeof intros] || intros.medium;
