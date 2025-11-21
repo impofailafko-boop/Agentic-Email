@@ -34,16 +34,27 @@ export class CampaignService implements ICampaignService {
     });
 
     this.draftGenerator = new DraftGeneratorService();
-    
-    // Initialize job queue for scheduled campaigns
-    this.campaignQueue = new Bull('campaign-queue', {
-      redis: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-      },
-    });
 
-    this.setupQueueProcessors();
+    // Initialize job queue for scheduled campaigns (skip in test environment)
+    if (process.env.NODE_ENV !== 'test') {
+      this.campaignQueue = new Bull('campaign-queue', {
+        redis: {
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+        },
+      });
+
+      this.setupQueueProcessors();
+    } else {
+      // Mock queue for tests
+      this.campaignQueue = {
+        process: () => {},
+        on: () => {},
+        add: async () => ({ id: 'mock-job' } as any),
+        getJobs: async () => [],
+        close: async () => {},
+      } as any;
+    }
   }
 
   private setupQueueProcessors(): void {
@@ -704,8 +715,8 @@ export class CampaignService implements ICampaignService {
 
         this.logger.info(`Sent to ${recipient.email}`);
 
-        // Rate limiting - 1 email per second to avoid spam filters
-        if (sent % 10 === 0) {
+        // Rate limiting - 1 email per second to avoid spam filters (skip in tests)
+        if (sent % 10 === 0 && process.env.NODE_ENV !== 'test') {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
@@ -809,5 +820,15 @@ Metrics:
   private async deleteCampaignFromDatabase(id: string): Promise<void> {
     // Implementation would delete from actual database
     this.logger.debug(`Deleting campaign ${id} from database`);
+  }
+
+  async close(): Promise<void> {
+    // Close Bull queue to allow tests to exit cleanly
+    try {
+      await this.campaignQueue.close();
+      this.logger.info('Campaign service closed');
+    } catch (error) {
+      this.logger.warn('Error closing campaign queue:', error);
+    }
   }
 }
