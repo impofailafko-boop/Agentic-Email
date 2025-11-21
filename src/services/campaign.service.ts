@@ -1,13 +1,13 @@
-import { 
-  EmailCampaign, 
-  ICampaignService, 
-  CampaignFilter, 
+import {
+  EmailCampaign,
+  ICampaignService,
+  CampaignFilter,
   CampaignSchedule,
   EmailDraft,
   CampaignMetrics
 } from '../core/campaign.interfaces';
 import { DraftGeneratorService, GenerationOptions } from './draft-generator.service';
-import { IDatabase } from '../core/interfaces';
+import { IDatabase, IEmailService } from '../core/interfaces';
 import { v4 as uuidv4 } from 'uuid';
 import winston from 'winston';
 import Bull from 'bull';
@@ -18,8 +18,10 @@ export class CampaignService implements ICampaignService {
   private campaignQueue: Bull.Queue;
   private campaigns: Map<string, EmailCampaign> = new Map();
   private drafts: Map<string, EmailDraft> = new Map();
+  private emailService?: IEmailService;
 
-  constructor(_database: IDatabase) {
+  constructor(_database: IDatabase, emailService?: IEmailService) {
+    this.emailService = emailService;
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.json(),
@@ -640,11 +642,13 @@ export class CampaignService implements ICampaignService {
     campaign.status = 'active';
     await this.updateCampaign(campaignId, campaign);
 
-    // Execute campaign logic here
+    // Execute campaign - actually send emails
     this.logger.info(`Executing campaign ${campaignId}`);
-    
-    // Update metrics
-    campaign.metrics.sent += 100; // Mock sending
+
+    // Send emails to recipients
+    await this.sendCampaignEmails(campaign);
+
+    campaign.status = 'completed';
     await this.updateCampaign(campaignId, campaign);
   }
 
@@ -655,6 +659,77 @@ export class CampaignService implements ICampaignService {
         await job.remove();
       }
     }
+  }
+
+  private async sendCampaignEmails(campaign: EmailCampaign): Promise<void> {
+    if (!this.emailService) {
+      this.logger.warn('No email service provided - emails will not be sent');
+      return;
+    }
+
+    const recipients = (campaign as any).recipients || [];
+    if (recipients.length === 0) {
+      this.logger.warn(`Campaign ${campaign.id} has no recipients`);
+      return;
+    }
+
+    this.logger.info(`Sending campaign ${campaign.id} to ${recipients.length} recipients`);
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const recipient of recipients) {
+      try {
+        // Personalize content
+        const subject = this.personalizeContent(campaign.content.subject, recipient);
+        const body = this.personalizeContent(campaign.content.body || '', recipient);
+
+        // Send email
+        await this.emailService.send({
+          to: [recipient.email],
+          from: (campaign as any).sender?.email || 'noreply@example.com',
+          subject,
+          body,
+          htmlBody: campaign.content.htmlBody,
+          category: 'sent',
+          metadata: {
+            campaignId: campaign.id,
+            recipientEmail: recipient.email
+          }
+        });
+
+        sent++;
+        campaign.metrics.sent++;
+        campaign.metrics.delivered++;
+
+        this.logger.info(`Sent to ${recipient.email}`);
+
+        // Rate limiting - 1 email per second to avoid spam filters
+        if (sent % 10 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+      } catch (error) {
+        failed++;
+        this.logger.error(`Failed to send to ${recipient.email}:`, error);
+      }
+    }
+
+    this.logger.info(`Campaign ${campaign.id} complete: ${sent} sent, ${failed} failed`);
+  }
+
+  private personalizeContent(template: string, recipient: any): string {
+    let content = template;
+
+    // Replace placeholders
+    content = content.replace(/\{\{firstName\}\}/g, recipient.firstName || recipient.name || '');
+    content = content.replace(/\{\{lastName\}\}/g, recipient.lastName || '');
+    content = content.replace(/\{\{name\}\}/g, recipient.name || recipient.firstName || '');
+    content = content.replace(/\{\{email\}\}/g, recipient.email || '');
+    content = content.replace(/\{\{company\}\}/g, recipient.company || '');
+    content = content.replace(/\{\{title\}\}/g, recipient.title || '');
+
+    return content;
   }
 
   private generateMockRecipients(count: number): any[] {
