@@ -310,6 +310,24 @@ npm run test:watch
 
 ## 📚 Documentation
 
+### SPARC Development Documentation
+
+This project follows the **SPARC methodology** (Specification, Pseudocode, Architecture, Refinement, Completion) for systematic development and comprehensive documentation.
+
+📘 **[SPARC v2.0 Documentation](docs/sparc-v2.0/)** - Complete project tracking and documentation
+
+Quick Links:
+- 📊 [Master Tracker](docs/sparc-v2.0/MASTER_TRACKER.md) - Current project status and branch tracking
+- 🎯 [Milestones](docs/sparc-v2.0/milestones/) - Major achievements (M1: Baseline, M2: Recovery, M3: v2.0)
+- 🔀 [Branch Work](docs/sparc-v2.0/branches/initial-project-checkout/) - Current session documentation
+- 📈 [Phase Progress](docs/sparc-v2.0/phases/) - SPARC phase tracking (Specification, Pseudocode, etc.)
+
+**Current Status**:
+- ✅ Phase 1 (Specification) - Complete
+- 📊 Project Completion: 75%
+- 🔨 TypeScript Build: 10 errors remaining
+- ✅ Tests: 212/217 passing (97.7%)
+
 ### Core Documentation
 - 📖 [Complete API Reference](https://docs.agentic-email.com/api)
 - 🚀 [Getting Started Guide](docs/getting-started.md)
