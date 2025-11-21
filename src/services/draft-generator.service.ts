@@ -323,7 +323,7 @@ Best,
   private async generateSubjectLine(
     baseSubject: string,
     recipient: RecipientProfile,
-    data: Record<string, any>,
+    _data: Record<string, any>,
     options: GenerationOptions
   ): Promise<string> {
     if (!this.openai) {

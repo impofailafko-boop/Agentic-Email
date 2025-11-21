@@ -147,7 +147,7 @@ export class EmailServer {
     this.app.use(express.urlencoded({ extended: true }));
 
     // Request logging
-    this.app.use((req, res, next) => {
+    this.app.use((req, _res, next) => {
       this.logger.info(`${req.method} ${req.path}`);
       next();
     });
@@ -195,7 +195,7 @@ export class EmailServer {
       }
     });
 
-    this.app.get('/api/emails/receive', async (req, res) => {
+    this.app.get('/api/emails/receive', async (_req, res) => {
       try {
         const emails = await this.emailService.receive();
         const processedEmails = [];

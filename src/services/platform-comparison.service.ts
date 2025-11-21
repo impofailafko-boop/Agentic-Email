@@ -1,5 +1,3 @@
-import winston from 'winston';
-
 export interface EmailPlatform {
   name: string;
   type: 'open-source' | 'commercial' | 'hybrid';
@@ -62,17 +60,6 @@ export class PlatformComparisonService {
   private platforms: Map<string, EmailPlatform> = new Map();
 
   constructor() {
-    const logger = winston.createLogger({
-      level: 'info',
-      format: winston.format.json(),
-      defaultMeta: { service: 'platform-comparison' },
-      transports: [
-        new winston.transports.Console({
-          format: winston.format.simple(),
-        }),
-      ],
-    });
-
     this.initializePlatforms();
   }
 

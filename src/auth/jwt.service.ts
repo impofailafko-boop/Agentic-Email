@@ -14,6 +14,9 @@ export class JWTService {
     refreshTokenExpiry: string = '7d'
   ) {
     this.secret = secret || process.env.JWT_SECRET || this.generateSecret();
+    if (!this.secret) {
+      throw new Error('JWT secret must be provided');
+    }
     this.accessTokenExpiry = accessTokenExpiry;
     this.refreshTokenExpiry = refreshTokenExpiry;
 
@@ -47,8 +50,8 @@ export class JWTService {
       roles,
     };
 
-    return jwt.sign(payload, this.secret, {
-      expiresIn: this.accessTokenExpiry,
+    return jwt.sign(payload, this.secret as string, {
+      expiresIn: this.accessTokenExpiry as any,
     });
   }
 
@@ -62,8 +65,8 @@ export class JWTService {
       roles,
     };
 
-    return jwt.sign(payload, this.secret, {
-      expiresIn: this.refreshTokenExpiry,
+    return jwt.sign(payload, this.secret as string, {
+      expiresIn: this.refreshTokenExpiry as any,
     });
   }
 

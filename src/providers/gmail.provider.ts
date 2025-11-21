@@ -152,7 +152,7 @@ export class GmailProvider implements IEmailProvider {
     await new Promise<void>((resolve, reject) => {
       fetch.on('message', (msg) => {
         msg.on('body', (stream) => {
-          simpleParser(stream, async (err: any, parsed: any) => {
+          simpleParser(stream as any, async (err, parsed) => {
             if (err) {
               this.logger.error('Error parsing email', err);
               return;
@@ -163,18 +163,18 @@ export class GmailProvider implements IEmailProvider {
               messageId: parsed.messageId || uuidv4(),
               threadId: parsed.inReplyTo || undefined,
               from: {
-                email: parsed.from?.value[0]?.address || '',
-                name: parsed.from?.value[0]?.name,
+                email: (parsed.from as any)?.value?.[0]?.address || '',
+                name: (parsed.from as any)?.value?.[0]?.name,
               },
-              to: (parsed.to?.value || []).map((addr: any) => ({
+              to: ((parsed.to as any)?.value || []).map((addr: any) => ({
                 email: addr.address || '',
                 name: addr.name,
               })),
-              cc: (parsed.cc?.value || []).map((addr: any) => ({
+              cc: ((parsed.cc as any)?.value || []).map((addr: any) => ({
                 email: addr.address || '',
                 name: addr.name,
               })),
-              bcc: (parsed.bcc?.value || []).map((addr: any) => ({
+              bcc: ((parsed.bcc as any)?.value || []).map((addr: any) => ({
                 email: addr.address || '',
                 name: addr.name,
               })),

@@ -19,7 +19,7 @@ export class CampaignService implements ICampaignService {
   private campaigns: Map<string, EmailCampaign> = new Map();
   private drafts: Map<string, EmailDraft> = new Map();
 
-  constructor(private readonly database: IDatabase) {
+  constructor(_database: IDatabase) {
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.json(),
@@ -200,7 +200,7 @@ export class CampaignService implements ICampaignService {
       
       if (!campaign) {
         // Try to load from database
-        campaign = await this.loadCampaignFromDatabase(id);
+        campaign = await this.loadCampaignFromDatabase(id) || undefined;
         if (campaign) {
           this.campaigns.set(id, campaign);
         }
