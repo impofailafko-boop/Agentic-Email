@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@azure/ai-text-analytics": "^5.1.0",
+    "@foxruv/iris": "^1.6.2",
     "@google-cloud/language": "^7.2.0",
     "@types/bull": "^3.15.9",
     "@types/cors": "^2.8.19",
@@ -22,8 +23,10 @@
     "jsonwebtoken": "^9.0.2",
     "mailparser": "^3.7.4",
     "natural": "^8.1.0",
+    "neural-trader": "^2.5.0",
     "nodemailer": "^7.0.5",
     "openai": "^5.13.1",
+    "ruvector": "^0.1.7",
     "socket.io": "^4.8.1",
     "sqlite3": "^5.1.7",
     "uuid": "^11.1.0",
