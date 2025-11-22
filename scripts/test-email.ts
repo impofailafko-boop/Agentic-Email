@@ -54,10 +54,12 @@ async function testEmailSend() {
     process.exit(1);
   }
 
-  // Prepare test email
+  // Prepare test email (support multiple recipients)
+  const recipients = process.env.TEST_RECIPIENT_EMAIL!.split(',').map(e => e.trim());
+
   const testEmail = {
     from: process.env.EMAIL_USER,
-    to: process.env.TEST_RECIPIENT_EMAIL,
+    to: recipients,
     subject: '✅ Agentic Email System - Test Email',
     text: `This is a test email from your Agentic Email System!
 
@@ -113,7 +115,7 @@ Powered by Agentic Email v3
   // Send email
   console.log('📤 Sending test email...');
   console.log(`   From: ${testEmail.from}`);
-  console.log(`   To: ${testEmail.to}`);
+  console.log(`   To: ${recipients.join(', ')}`);
   console.log(`   Subject: ${testEmail.subject}\n`);
 
   try {
@@ -121,7 +123,7 @@ Powered by Agentic Email v3
     console.log('✅ Email sent successfully!');
     console.log(`   Message ID: ${info.messageId}`);
     console.log(`   Response: ${info.response}\n`);
-    console.log('🎉 Phase 1 COMPLETE! Check your inbox at:', testEmail.to);
+    console.log('🎉 Phase 1 COMPLETE! Check your inbox at:', recipients.join(', '));
     console.log('\n💡 Next: Run "npm run phase2" to process multiple leads');
   } catch (error) {
     console.error('❌ Failed to send email:');
