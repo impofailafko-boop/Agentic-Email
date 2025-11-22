@@ -1,5 +1,5 @@
 import { DraftGeneratorService, GenerationOptions } from '../../services/draft-generator.service';
-import { EmailCampaign, RecipientProfile, EmailDraft } from '../../core/campaign.interfaces';
+import { EmailCampaign, RecipientProfile } from '../../core/campaign.interfaces';
 
 // Mock OpenAI
 jest.mock('openai', () => {
@@ -529,7 +529,7 @@ describe('DraftGeneratorService', () => {
     test('should select template based on campaign type', async () => {
       const newsletterCampaign = {
         ...mockCampaign,
-        type: 'newsletter' as const,
+        type: 'recurring' as const,
       };
 
       const draft = await draftGenerator.generateDraft(newsletterCampaign, mockRecipient);
@@ -540,7 +540,7 @@ describe('DraftGeneratorService', () => {
     test('should use follow-up template', async () => {
       const followUpCampaign = {
         ...mockCampaign,
-        type: 'follow_up' as const,
+        type: 'triggered' as const,
       };
 
       const draft = await draftGenerator.generateDraft(followUpCampaign, mockRecipient);
@@ -551,7 +551,7 @@ describe('DraftGeneratorService', () => {
     test('should fallback to default template', async () => {
       const customCampaign = {
         ...mockCampaign,
-        type: 'custom' as any,
+        type: 'one-time' as const,
       };
 
       const draft = await draftGenerator.generateDraft(customCampaign, mockRecipient);

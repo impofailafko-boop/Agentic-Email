@@ -479,7 +479,7 @@ describe('Platform Comparison Service', () => {
 
     test('should match technical expertise', () => {
       const requirements = {
-        technicalExpertise: 'low',
+        technicalExpertise: 'low' as const,
       };
 
       const platforms = comparisonService.comparePlatforms(requirements);

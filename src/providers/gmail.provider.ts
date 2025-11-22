@@ -152,7 +152,7 @@ export class GmailProvider implements IEmailProvider {
     await new Promise<void>((resolve, reject) => {
       fetch.on('message', (msg) => {
         msg.on('body', (stream) => {
-          simpleParser(stream, async (err: any, parsed: any) => {
+          simpleParser(stream as any, async (err: any, parsed: any) => {
             if (err) {
               this.logger.error('Error parsing email', err);
               return;

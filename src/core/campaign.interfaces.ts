@@ -354,7 +354,7 @@ export interface DraftMetrics {
 export interface ICampaignService {
   createCampaign(campaign: Partial<EmailCampaign>): Promise<EmailCampaign>;
   updateCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign>;
-  getCampaign(id: string): Promise<EmailCampaign | null>;
+  getCampaign(id: string): Promise<EmailCampaign | undefined>;
   listCampaigns(filter?: CampaignFilter): Promise<EmailCampaign[]>;
   deleteCampaign(id: string): Promise<boolean>;
   

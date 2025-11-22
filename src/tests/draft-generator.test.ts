@@ -366,21 +366,21 @@ describe('DraftGeneratorService', () => {
 
   describe('Template Selection', () => {
     test('should select appropriate template for campaign type', async () => {
-      const newsletterCampaign = { ...mockCampaign, type: 'newsletter' as const };
+      const newsletterCampaign = { ...mockCampaign, type: 'recurring' as const };
       const draft = await draftGenerator.generateDraft(newsletterCampaign, mockRecipient);
 
       expect(draft.content.body).toBeDefined();
     });
 
     test('should use follow-up template for follow-up campaigns', async () => {
-      const followUpCampaign = { ...mockCampaign, type: 'follow_up' as const };
+      const followUpCampaign = { ...mockCampaign, type: 'triggered' as const };
       const draft = await draftGenerator.generateDraft(followUpCampaign, mockRecipient);
 
       expect(draft.content.body).toBeDefined();
     });
 
     test('should fall back to default template', async () => {
-      const customCampaign = { ...mockCampaign, type: 'custom' as const };
+      const customCampaign = { ...mockCampaign, type: 'one-time' as const };
       const draft = await draftGenerator.generateDraft(customCampaign, mockRecipient);
 
       expect(draft.content.body).toBeDefined();

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { TokenPayload, UserRole } from '../models/user.model';
 import winston from 'winston';
 
@@ -49,7 +49,7 @@ export class JWTService {
 
     return jwt.sign(payload, this.secret, {
       expiresIn: this.accessTokenExpiry,
-    });
+    } as SignOptions);
   }
 
   /**
@@ -64,7 +64,7 @@ export class JWTService {
 
     return jwt.sign(payload, this.secret, {
       expiresIn: this.refreshTokenExpiry,
-    });
+    } as SignOptions);
   }
 
   /**

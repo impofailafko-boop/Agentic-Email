@@ -130,7 +130,7 @@ export class CategorizerAgent extends BaseAgent {
     return promotionIndicators.filter(pattern => pattern.test(text)).length >= 2;
   }
 
-  private isSocial(fromEmail: string, text: string): boolean {
+  private isSocial(fromEmail: string, _text: string): boolean {
     const socialDomains = [
       'facebook.com',
       'twitter.com',

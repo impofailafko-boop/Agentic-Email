@@ -68,7 +68,7 @@ describe('CampaignService', () => {
       expect(deleted).toBe(true);
 
       const retrieved = await campaignService.getCampaign(campaign.id);
-      expect(retrieved).toBeNull();
+      expect(retrieved).toBeUndefined();
     });
 
     test('should handle non-existent campaign deletion', async () => {

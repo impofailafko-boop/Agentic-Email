@@ -19,7 +19,7 @@ export class CampaignService implements ICampaignService {
   private campaigns: Map<string, EmailCampaign> = new Map();
   private drafts: Map<string, EmailDraft> = new Map();
 
-  constructor(private readonly database: IDatabase) {
+  constructor(_database: IDatabase) {
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.json(),
@@ -194,10 +194,10 @@ export class CampaignService implements ICampaignService {
     }
   }
 
-  async getCampaign(id: string): Promise<EmailCampaign | null> {
+  async getCampaign(id: string): Promise<EmailCampaign | undefined> {
     try {
       let campaign = this.campaigns.get(id);
-      
+
       if (!campaign) {
         // Try to load from database
         campaign = await this.loadCampaignFromDatabase(id);
@@ -206,10 +206,10 @@ export class CampaignService implements ICampaignService {
         }
       }
 
-      return campaign ?? null;
+      return campaign;
     } catch (error) {
       this.logger.error(`Failed to get campaign ${id}:`, error);
-      return null;
+      return undefined;
     }
   }
 
@@ -725,10 +725,10 @@ Metrics:
     this.logger.debug(`Saving campaign ${campaign.id} to database`);
   }
 
-  private async loadCampaignFromDatabase(id: string): Promise<EmailCampaign | null> {
+  private async loadCampaignFromDatabase(id: string): Promise<EmailCampaign | undefined> {
     // Implementation would load from actual database
     this.logger.debug(`Loading campaign ${id} from database`);
-    return null;
+    return undefined;
   }
 
   private async deleteCampaignFromDatabase(id: string): Promise<void> {
