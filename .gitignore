@@ -15,6 +15,10 @@ emails.db
 tmp/
 temp/
 
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+
 # Claude Flow generated files
 .claude/settings.local.json
 .mcp.json
